@@ -3,14 +3,18 @@ const cors = require('cors');
 const mysql = require('mysql2/promise');
 
 const app = express();
-app.use(cors());
+const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
+app.use(cors({
+  origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((value) => value.trim())
+}));
 app.use(express.json());
 
 const pool = mysql.createPool({
-  host: 'hospital-rds.cxig6maeis9x.ap-south-1.rds.amazonaws.com',
-  user: 'admin',
-  password: 'Alyaan123',
-  database: 'hospital_app'
+  host: process.env.DB_HOST || 'localhost',
+  port: Number(process.env.DB_PORT) || 3306,
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || '',
+  database: process.env.DB_NAME || 'hospital_app'
 });
 
 app.get('/dashboard', async (req, res) => {
@@ -121,4 +125,5 @@ app.delete('/settings/:policy', async (req, res) => {
   const { policy } = req.params; await pool.query('DELETE FROM settings WHERE policy=?', [policy]); res.json({ message: 'Setting deleted' });
 });
 
-app.listen(8080, '0.0.0.0', () => console.log('Backend running on http://0.0.0.0:8080'));
+const port = Number(process.env.PORT) || 8080;
+app.listen(port, '0.0.0.0', () => console.log(`Backend running on http://0.0.0.0:${port}`));
