@@ -2,19 +2,18 @@
   "name": "hospital-admin",
   "version": "1.0.0",
   "private": true,
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend"
+  ],
   "scripts": {
-    "dev":   "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "deploy:s3": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-s3.ps1"
-  },
-  "dependencies": {
-    "react":        "^18.2.0",
-    "react-dom":    "^18.2.0",
-    "react-router-dom": "^6.22.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.2.1",
-    "vite": "^5.1.4"
+    "dev": "npm run dev --workspace @hospital/frontend",
+    "dev:frontend": "npm run dev --workspace @hospital/frontend",
+    "dev:backend": "npm run dev --workspace @hospital/backend",
+    "build": "npm run build --workspace @hospital/frontend",
+    "build:frontend": "npm run build --workspace @hospital/frontend",
+    "start": "npm run start --workspace @hospital/backend",
+    "start:backend": "npm run start --workspace @hospital/backend",
+    "deploy:s3": "npm run deploy:s3 --workspace @hospital/frontend"
   }
 }

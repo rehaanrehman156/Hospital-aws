@@ -1,74 +1,56 @@
-# Hospital Admin
+# Hospital Admin Monorepo
 
-A React-based admin dashboard for managing hospital operations, including patients, doctors, appointments, billing, and settings. The frontend connects to a Node.js/Express backend backed by MySQL.
+This repository is organized as a monorepo with separate frontend and backend apps.
 
-## Features
-- Dashboard with summary statistics
-- Patients management with create, read, update, and delete actions
-- Doctors management with specialization and contact details
-- Appointments overview
-- Billing and invoicing workflow
-- Settings page for hospital policies and preferences
-
-## Tech Stack
-- Frontend: React + Vite + React Router
-- Backend: Node.js + Express + MySQL
-- Deployment: AWS S3 for the frontend
+## Repository Layout
+- apps/frontend: React + Vite admin dashboard
+- apps/backend: Express + MySQL API
+- .github/workflows: CI/CD workflows
 
 ## Prerequisites
 - Node.js 18+
-- npm
-- A running MySQL database
-- AWS CLI configured if you want to deploy to S3
+- npm 9+
+- MySQL database
+- AWS CLI (optional, for manual S3 deploy)
 
-## Frontend Setup
-1. Install dependencies
-   ```bash
-   npm install
-   ```
-2. Copy the example environment file and update it if needed
-   ```bash
-   copy .env.example .env
-   ```
-3. Start the development server
-   ```bash
-   npm run dev
-   ```
-   The app will be available at http://localhost:5173
-
-## Backend Setup
-Set these environment variables before starting the backend:
+## Install Dependencies
 ```bash
-set DB_HOST=localhost
-set DB_PORT=3306
-set DB_USER=root
-set DB_PASSWORD=your-password
-set DB_NAME=hospital_app
-set CORS_ORIGIN=http://localhost:5173
-set PORT=8080
+npm install
 ```
 
-Then start the backend:
+## Environment Setup
+1. Frontend variables:
+   - Copy apps/frontend/.env.example to apps/frontend/.env
+2. Backend variables:
+   - Copy apps/backend/.env.example to apps/backend/.env
+
+## Run Apps
 ```bash
-node server.js
+npm run dev:frontend
+npm run dev:backend
 ```
 
-## Build for Production
+Frontend default URL: http://localhost:5173
+Backend default URL: http://localhost:8080
+
+## Build Frontend
 ```bash
-npm run build
+npm run build:frontend
 ```
 
-## Deploy to S3
+## Deploy Frontend to S3 (manual)
 ```bash
-aws s3 sync ./dist s3://YOUR_BUCKET_NAME --delete
+npm run deploy:s3 --workspace @hospital/frontend -- --BucketName YOUR_BUCKET_NAME
 ```
 
-## GitHub Actions
-A workflow is included in [.github/workflows/deploy.yml](.github/workflows/deploy.yml) to build the frontend and deploy it to S3 when changes are pushed to the main branch. Configure the following repository secrets first:
+## GitHub Actions Deploy
+When code is pushed to main, the workflow builds apps/frontend and deploys to S3.
+
+Required repository secrets:
 - AWS_ACCESS_KEY_ID
 - AWS_SECRET_ACCESS_KEY
 - AWS_REGION
 - S3_BUCKET_NAME
 
-## Security Notice
-Keep secrets in environment variables or GitHub Actions secrets rather than hardcoding them into the source code.
+## Security
+Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.
