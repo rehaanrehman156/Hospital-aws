@@ -24,7 +24,21 @@ jobs:
       - name: Build app
         run: npm run build --workspace @hospital/frontend
 
+      - name: Check deploy secrets
+        id: deploy_check
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.S3_BUCKET_NAME }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deploy (secrets missing)
+        if: steps.deploy_check.outputs.ready != 'true'
+        run: echo "S3 deploy skipped because one or more required secrets are missing."
+
       - name: Deploy to S3
+        if: steps.deploy_check.outputs.ready == 'true'
         uses: jakejarvis/s3-sync-action@master
         with:
           args: --delete
