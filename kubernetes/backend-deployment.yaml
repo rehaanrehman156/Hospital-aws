@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hospital-backend
+  labels:
+    app: hospital-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hospital-backend
+  template:
+    metadata:
+      labels:
+        app: hospital-backend
+    spec:
+      containers:
+        - name: backend
+          image: hospital-backend:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: CORS_ORIGIN
+              value: "*"
+            - name: DB_HOST
+              value: "your-db-host"
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_USER
+              value: "admin"
+            - name: DB_PASSWORD
+              value: "Alyaan123"
+            - name: DB_NAME
+              value: "hospital_app"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hospital-backend
+  labels:
+    app: hospital-backend
+spec:
+  selector:
+    app: hospital-backend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP
