@@ -15,15 +15,20 @@ This folder contains Kubernetes manifests for the Hospital Admin project.
 
 1. Create an ECR repo and push image:
 	- `aws ecr create-repository --repository-name hospital-backend --region ap-south-1`
-	- Build and push `apps/backend/Dockerfile` image to ECR
+	- Build and push `apps/backend/Dockerfile` image to ECR with two tags:
+		- Immutable release tag (for traceability), e.g. `20260710-120000`
+		- Stable runtime tag `prod` (used by the Kubernetes deployment)
 2. Create backend secret from template:
 	- Copy `kubernetes/backend-secret.example.yaml` to `kubernetes/backend-secret.yaml`
 	- Fill real DB values
-3. Update backend deployment image:
-	- Replace `YOUR_ECR_URI/hospital-backend:latest` in `kubernetes/backend-eks-deployment.yaml`
-4. Apply manifests:
+3. Apply manifests:
 	- `kubectl apply -f kubernetes/backend-secret.yaml`
 	- `kubectl apply -f kubernetes/backend-eks-deployment.yaml`
+4. Bind deployment to your ECR URI (one-time):
+	- `kubectl set image deployment/hospital-backend backend=<ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:prod`
+5. For each release:
+	- Push the immutable image tag and also push/update the `prod` tag
+	- `kubectl rollout restart deployment/hospital-backend`
 
 ## Verify
 

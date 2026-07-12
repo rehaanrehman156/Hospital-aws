@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: YOUR_ECR_URI/hospital-backend:latest
+          image: hospital-backend:prod
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
