@@ -35,13 +35,13 @@ set -e
 stage("Deploy to EKS") {
 sh '''
 set -e
-source image.env
+. image.env
 
 aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER
-  kubectl set image deployment/hospital-backend backend=$IMAGE_URI:$IMAGE_TAG
-  kubectl rollout status deployment/hospital-backend --timeout=300s
-  kubectl get pods -l app=hospital-backend
-  kubectl get svc hospital-backend
+kubectl set image deployment/hospital-backend backend=$IMAGE_URI:$IMAGE_TAG
+kubectl rollout status deployment/hospital-backend --timeout=300s
+kubectl get pods -l app=hospital-backend
+kubectl get svc hospital-backend
 '''
 }
 }
