@@ -6,3 +6,5 @@ apps/*/dist/
 .env.*
 !.env.example
 !apps/**/.env.example
+image.env
+
