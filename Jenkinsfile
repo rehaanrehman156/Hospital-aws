@@ -3,8 +3,8 @@ node {
   env.EKS_CLUSTER = "hospital-admin-eks"
   env.ECR_REPO = "hospital-backend"
   env.KUBECONFIG = "/var/lib/jenkins/.kube/config"
-  env.S3_BUCKET = "hospital-admin-frontend-${BUILD_NUMBER}" // Change this to your actual S3 bucket
-  env.CLOUDFRONT_DISTRIBUTION_ID = "" // Set your CloudFront distribution ID here (optional)
+  env.S3_BUCKET = "hospital-frontend-rehaan-tg"
+  env.CLOUDFRONT_DISTRIBUTION_ID = ""
 
   stage("Checkout") {
     checkout scm
