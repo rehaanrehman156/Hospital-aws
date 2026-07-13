@@ -9,6 +9,12 @@ node {
   stage("Checkout") {
     checkout scm
   }
+  stage("Install Dependencies") {
+  sh '''
+    set -e
+    npm ci
+  '''
+}
 
   stage("Build Backend Image") {
     sh '''
@@ -44,40 +50,38 @@ node {
   }
 
   stage("Build and Deploy Frontend to S3") {
-    sh '''
-      set -e
-      cd apps/frontend
-      export VITE_API_BASE_URL="http://13.207.207.90:8080"
-      echo "Building frontend..."
-      npm run build
-      
-      # Upload HTML files with short cache (1 hour)
-      echo "Uploading HTML files with cache control..."
-      aws s3 sync ./dist s3://$S3_BUCKET --delete --region $AWS_REGION \
-        --exclude "*" --include "*.html" \
-        --cache-control "public, max-age=3600, must-revalidate"
-      
-      # Upload versioned assets with long cache (1 year)
-      echo "Uploading assets with long cache..."
-      aws s3 sync ./dist s3://$S3_BUCKET --delete --region $AWS_REGION \
-        --exclude "*.html" \
-        --cache-control "public, max-age=31536000, immutable"
-      
-      echo "Frontend deployment complete!"
-      echo "S3 URL: https://$S3_BUCKET.s3.$AWS_REGION.amazonaws.com/"
-    '''
+  sh '''
+    set -e
+    export VITE_API_BASE_URL="http://13.207.207.90:8080"
+
+    echo "Building frontend..."
+    npm run build --workspace @hospital/frontend
     
-    if (env.CLOUDFRONT_DISTRIBUTION_ID != "") {
-      sh '''
-        echo "Invalidating CloudFront distribution: $CLOUDFRONT_DISTRIBUTION_ID"
-        aws cloudfront create-invalidation \
-          --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
-          --paths "/*" \
-          --region $AWS_REGION
-        echo "CloudFront invalidation initiated!"
-      '''
-    }
+    echo "Uploading HTML files with cache control..."
+    aws s3 sync ./apps/frontend/dist s3://$S3_BUCKET --delete --region $AWS_REGION \
+      --exclude "*" --include "*.html" \
+      --cache-control "public, max-age=3600, must-revalidate"
+    
+    echo "Uploading assets with long cache..."
+    aws s3 sync ./apps/frontend/dist s3://$S3_BUCKET --delete --region $AWS_REGION \
+      --exclude "*.html" \
+      --cache-control "public, max-age=31536000, immutable"
+    
+    echo "Frontend deployment complete!"
+    echo "S3 URL: https://$S3_BUCKET.s3.$AWS_REGION.amazonaws.com/"
+  '''
+  
+  if (env.CLOUDFRONT_DISTRIBUTION_ID != "") {
+    sh '''
+      echo "Invalidating CloudFront distribution: $CLOUDFRONT_DISTRIBUTION_ID"
+      aws cloudfront create-invalidation \
+        --distribution-id $CLOUDFRONT_DISTRIBUTION_ID \
+        --paths "/*" \
+        --region $AWS_REGION
+      echo "CloudFront invalidation initiated!"
+    '''
   }
+}
 
   stage("Deploy Backend to EKS") {
     sh '''
