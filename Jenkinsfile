@@ -52,7 +52,7 @@ node {
   stage("Build and Deploy Frontend to S3") {
   sh '''
     set -e
-    export VITE_API_BASE_URL="http://13.207.207.90:8080"
+    export VITE_API_BASE_URL="http://k8s-default-hospital-deb61e8084-4f747d68c41e264e.elb.ap-south-1.amazonaws.com:8080"
 
     echo "Building frontend..."
     npm run build --workspace @hospital/frontend
@@ -88,7 +88,7 @@ node {
       set -e
       . ./image.env
 
-      aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER
+      aws eks update-kubeconfig --region $AWS_REGION --name hospital-admin-eks-auto
       kubectl set image deployment/hospital-backend backend=$IMAGE_URI:$IMAGE_TAG
       kubectl rollout status deployment/hospital-backend --timeout=300s
       kubectl get pods -l app=hospital-backend
