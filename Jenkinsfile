@@ -47,7 +47,7 @@ node {
     sh '''
       set -e
       cd apps/frontend
-      
+      export VITE_API_BASE_URL="http://13.207.207.90:8080"
       echo "Building frontend..."
       npm run build
       
