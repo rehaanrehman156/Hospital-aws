@@ -8,3 +8,9 @@ apps/*/dist/
 !apps/**/.env.example
 image.env
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
