@@ -35,7 +35,14 @@ metadata:
   name: hospital-backend
   labels:
     app: hospital-backend
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
+    service.beta.kubernetes.io/aws-load-balancer-type: external
+    service.beta.kubernetes.io/aws-load-balancer-nlb-target-type: ip
 spec:
+  type: LoadBalancer
+  loadBalancerSourceRanges:
+    - 0.0.0.0/0
   selector:
     app: hospital-backend
   ports:
@@ -43,4 +50,3 @@ spec:
       protocol: TCP
       port: 8080
       targetPort: 8080
-  type: LoadBalancer

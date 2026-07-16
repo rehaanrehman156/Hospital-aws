@@ -44,13 +44,29 @@ npm run deploy:s3 --workspace @hospital/frontend -- --BucketName YOUR_BUCKET_NAM
 ```
 
 ## GitHub Actions Deploy
-When code is pushed to main, the workflow builds apps/frontend and deploys to S3.
+When code is pushed to `main`, the workflow:
+- builds frontend (`apps/frontend`)
+- deploys frontend to S3 with cache headers
+- optionally invalidates CloudFront
+- builds backend Docker image and pushes to ECR
+- updates `kubernetes/backend-eks-deployment.yaml` image tag for Argo CD GitOps sync
 
 Required repository secrets:
 - AWS_ACCESS_KEY_ID
 - AWS_SECRET_ACCESS_KEY
 - AWS_REGION
 - S3_BUCKET_NAME
+- VITE_API_BASE_URL
+- ECR_REPOSITORY
+
+Optional frontend secret:
+- CLOUDFRONT_DISTRIBUTION_ID
+
+## Argo CD + EKS Auto
+1. Install Argo CD in your EKS Auto cluster.
+2. Apply `kubernetes/backend-secret.yaml` with real DB credentials.
+3. Apply `kubernetes/argocd-application.yaml`.
+4. Argo CD will watch `kubernetes/backend-eks-deployment.yaml` and sync backend automatically.
 
 ## Security
 Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.

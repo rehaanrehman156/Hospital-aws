@@ -1,0 +1,10 @@
+aws_region                = "ap-south-1"
+frontend_bucket_name      = "hospital-frontend-rehaan-818986458477"
+existing_vpc_id           = "vpc-09ba236dbde41575f"
+backend_ec2_instance_id   = "i-07e0d7a1f42e3b0a5"
+backend_security_group_id = "sg-0ad2b499f48c665c1"
+rds_identifier            = "hospital-app"
+rds_security_group_id     = "sg-0eb2031f98a73b824"
+
+# Keep this aligned with your actual current DB name if you later model more RDS settings.
+db_name = "hospital-app"
