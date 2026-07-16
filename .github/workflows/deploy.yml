@@ -39,7 +39,6 @@ jobs:
       - name: Check frontend deploy secrets
         id: frontend_check
         run: |
-          run: |
           if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.S3_BUCKET_NAME }}" ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
           else
@@ -53,7 +52,7 @@ jobs:
           fi
 
       - name: Skip frontend deploy (secrets missing)
-        if: steps.frontend_check.outputs.ready == 'true'
+        if: steps.frontend_check.outputs.ready != 'true' 
         run: echo "Frontend deploy skipped. Missing one or more required secrets."
 
       - name: Configure AWS credentials
@@ -79,7 +78,7 @@ jobs:
             --cache-control "public, max-age=31536000, immutable"
 
       - name: Invalidate CloudFront cache (optional)
-        if: steps.frontend_check.outputs.ready == 'true' && secrets.CLOUDFRONT_DISTRIBUTION_ID != ''
+        if: steps.frontend_check.outputs.ready == 'true' && steps.frontend_check.outputs.cloudfront_ready == 'true'
         run: |
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
