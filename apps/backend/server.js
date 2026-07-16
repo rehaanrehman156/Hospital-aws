@@ -124,6 +124,8 @@ app.put('/settings/:policy', async (req, res) => {
 app.delete('/settings/:policy', async (req, res) => {
   const { policy } = req.params; await pool.query('DELETE FROM settings WHERE policy=?', [policy]); res.json({ message: 'Setting deleted' });
 });
-
+app.get('/health', async (req, res) => {
+  res.json({ status: 'ok', service: 'hospital-backend' });
+});
 const port = Number(process.env.PORT) || 8080;
 app.listen(port, '0.0.0.0', () => console.log(`Backend running on http://0.0.0.0:${port}`));
