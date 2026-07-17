@@ -20,21 +20,37 @@ spec:
           imagePullPolicy: Never
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           env:
             - name: PORT
               value: "8080"
             - name: CORS_ORIGIN
               value: "*"
-            - name: DB_HOST
-              value: "hospital-rds.cxig6maeis9x.ap-south-1.rds.amazonaws.com"
-            - name: DB_PORT
-              value: "3306"
-            - name: DB_USER
-              value: "admin"
-            - name: DB_PASSWORD
-              value: "Alyaan123"
-            - name: DB_NAME
-              value: "hospital_app"
+          envFrom:
+            - secretRef:
+                name: hospital-backend-secret
 ---
 apiVersion: v1
 kind: Service

@@ -65,8 +65,9 @@ Optional frontend secret:
 ## Argo CD + EKS Auto
 1. Install Argo CD in your EKS Auto cluster.
 2. Apply `kubernetes/backend-secret.yaml` with real DB credentials.
-3. Apply `kubernetes/argocd-application.yaml`.
-4. Argo CD will watch `kubernetes/backend-eks-deployment.yaml` and sync backend automatically.
+3. Apply `kubernetes/backend-hpa.yaml` for backend autoscaling.
+4. Apply `kubernetes/argocd-application.yaml`.
+5. Argo CD will watch `kubernetes/backend-eks-deployment.yaml` and sync backend automatically.
 
 ## Security
 Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.

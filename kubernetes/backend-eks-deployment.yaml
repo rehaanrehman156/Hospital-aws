@@ -5,7 +5,7 @@ metadata:
   labels:
     app: hospital-backend
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: hospital-backend
@@ -20,6 +20,29 @@ spec:
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
           env:
             - name: PORT
               value: "8080"

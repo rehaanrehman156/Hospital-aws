@@ -24,6 +24,7 @@ This folder contains Kubernetes manifests for the Hospital Admin project.
 3. Apply manifests:
 	- `kubectl apply -f kubernetes/backend-secret.yaml`
 	- `kubectl apply -f kubernetes/backend-eks-deployment.yaml`
+	- `kubectl apply -f kubernetes/backend-hpa.yaml`
 4. Bind deployment to your ECR URI (one-time):
 	- `kubectl set image deployment/hospital-backend backend=<ACCOUNT_ID>.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:prod`
 5. For each release:
@@ -34,5 +35,7 @@ This folder contains Kubernetes manifests for the Hospital Admin project.
 
 - `kubectl get pods -l app=hospital-backend`
 - `kubectl get svc hospital-backend`
+- `kubectl get hpa hospital-backend`
+- `kubectl describe deployment hospital-backend`
 
 When the service `EXTERNAL-IP` is assigned, use that URL for the frontend API base URL.
