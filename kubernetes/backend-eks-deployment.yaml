@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: backend
-          image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:739f6f5
+          image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:078fcd3
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
