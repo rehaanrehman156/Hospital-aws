@@ -26,7 +26,7 @@ spec:
             - name: CORS_ORIGIN
               value: "*"
             - name: DB_HOST
-              value: "your-db-host"
+              value: "hospital-rds.cxig6maeis9x.ap-south-1.rds.amazonaws.com"
             - name: DB_PORT
               value: "3306"
             - name: DB_USER
