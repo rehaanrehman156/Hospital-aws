@@ -124,6 +124,15 @@ app.put('/settings/:policy', async (req, res) => {
 app.delete('/settings/:policy', async (req, res) => {
   const { policy } = req.params; await pool.query('DELETE FROM settings WHERE policy=?', [policy]); res.json({ message: 'Setting deleted' });
 });
+app.get('/ready', async (req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    res.json({ status: 'ready', service: 'hospital-backend' });
+  } catch (err) {
+    console.error(err);
+    res.status(503).json({ status: 'not_ready', service: 'hospital-backend' });
+  }
+});
 app.get('/health', async (req, res) => {
   res.json({ status: 'ok', service: 'hospital-backend' });
 });
