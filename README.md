@@ -71,3 +71,17 @@ Optional frontend secret:
 
 ## Security
 Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.
+
+## Terraform: Dev and Stage Namespaces
+To create `dev` and `stage` namespaces in EKS via Terraform:
+
+1. Open `terraform/terraform.tfvars` and set:
+   - `create_k8s_environments = true`
+   - `eks_cluster_name = "hospital-admin-eks-auto"` (or your cluster)
+   - `environment_namespaces = ["dev", "stage"]`
+2. Run:
+   - `terraform -chdir=terraform init`
+   - `terraform -chdir=terraform plan`
+   - `terraform -chdir=terraform apply`
+3. Verify:
+   - `kubectl get ns`

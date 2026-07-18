@@ -8,3 +8,8 @@ rds_security_group_id     = "sg-0eb2031f98a73b824"
 
 # Keep this aligned with your actual current DB name if you later model more RDS settings.
 db_name = "hospital-app"
+
+# Enable this to create Kubernetes namespaces in your EKS cluster.
+create_k8s_environments = true
+eks_cluster_name        = "hospital-admin-eks-auto"
+environment_namespaces  = ["dev", "stage"]

@@ -86,3 +86,21 @@ variable "db_instance_class" {
   type        = string
   default     = "db.t3.micro"
 }
+
+variable "eks_cluster_name" {
+  description = "EKS cluster name used to manage Kubernetes namespaces with Terraform."
+  type        = string
+  default     = "hospital-admin-eks-auto"
+}
+
+variable "create_k8s_environments" {
+  description = "When true, Terraform creates Kubernetes namespaces defined in environment_namespaces."
+  type        = bool
+  default     = false
+}
+
+variable "environment_namespaces" {
+  description = "Kubernetes namespaces to create for application environments."
+  type        = list(string)
+  default     = ["dev", "stage"]
+}

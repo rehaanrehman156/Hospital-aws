@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - dev
+      - stage
   workflow_dispatch:
 
 concurrency:
-  group: deploy-main
+  group: deploy-${{ github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -88,7 +90,7 @@ jobs:
     name: Build backend image and update manifest
     runs-on: ubuntu-latest
     needs: deploy-frontend
-    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
+    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'main'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -164,4 +166,152 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add kubernetes/backend-eks-deployment.yaml
           git commit -m "ci: update backend image for Argo CD [skip ci]"
+          git push
+
+  deploy-dev:
+    name: Deploy to dev namespace
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'dev'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check secrets
+        id: secrets_check
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.secrets_check.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.secrets_check.outputs.ready == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push dev image
+        if: steps.secrets_check.outputs.ready == 'true'
+        id: image
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          set -e
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          IMAGE_TAG="dev-${GITHUB_SHA::7}"
+
+          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
+          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:dev"
+          docker push "${IMAGE_URI}:${IMAGE_TAG}"
+          docker push "${IMAGE_URI}:dev"
+
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Update dev manifest image tag
+        if: steps.secrets_check.outputs.ready == 'true'
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
+        run: |
+          set -e
+          sed -i "s|^\(\s*image:\s*\).*|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+
+      - name: Commit dev manifest update
+        if: steps.secrets_check.outputs.ready == 'true'
+        run: |
+          set -e
+          if git diff --quiet -- kubernetes/dev/backend-deployment.yaml; then
+            echo "No manifest changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kubernetes/dev/backend-deployment.yaml
+          git commit -m "ci: update dev backend image [skip ci]"
+          git push
+
+  deploy-stage:
+    name: Deploy to stage namespace
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'stage'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check secrets
+        id: secrets_check
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.secrets_check.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        if: steps.secrets_check.outputs.ready == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push stage image
+        if: steps.secrets_check.outputs.ready == 'true'
+        id: image
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          set -e
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          IMAGE_TAG="stage-${GITHUB_SHA::7}"
+
+          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
+          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:stage"
+          docker push "${IMAGE_URI}:${IMAGE_TAG}"
+          docker push "${IMAGE_URI}:stage"
+
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Update stage manifest image tag
+        if: steps.secrets_check.outputs.ready == 'true'
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
+          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
+        run: |
+          set -e
+          sed -i "s|^\(\s*image:\s*\).*|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/stage/backend-deployment.yaml
+
+      - name: Commit stage manifest update
+        if: steps.secrets_check.outputs.ready == 'true'
+        run: |
+          set -e
+          if git diff --quiet -- kubernetes/stage/backend-deployment.yaml; then
+            echo "No manifest changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kubernetes/stage/backend-deployment.yaml
+          git commit -m "ci: update stage backend image [skip ci]"
           git push
