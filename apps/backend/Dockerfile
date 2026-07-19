@@ -9,7 +9,7 @@ RUN npm install --omit=dev && npm cache clean --force
 
 COPY . .
 
-FROM gcr.io/distroless/nodejs20-debian12:nonroot
+FROM cgr.dev/chainguard/node:latest
 
 WORKDIR /app
 
