@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
@@ -9,9 +9,12 @@ RUN npm install --omit=dev && npm cache clean --force
 
 COPY . .
 
-RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
-USER app
+FROM gcr.io/distroless/nodejs20-debian12:nonroot
+
+WORKDIR /app
+
+COPY --from=build --chown=65532:65532 /app /app
 
 EXPOSE 8080
 
-CMD ["node", "server.js"]
+CMD ["server.js"]
