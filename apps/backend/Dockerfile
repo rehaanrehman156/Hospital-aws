@@ -3,11 +3,13 @@ FROM node:16-alpine
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install
+RUN npm install --omit=dev && npm cache clean --force
 
 COPY . .
 
-# Expose the port your app listens on
+RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
+USER app
+
 EXPOSE 8080
 
 CMD ["node", "server.js"]

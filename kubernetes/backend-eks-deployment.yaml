@@ -14,12 +14,22 @@ spec:
       labels:
         app: hospital-backend
     spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: backend
           image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:e3936fc
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
           readinessProbe:
             httpGet:
               path: /ready
