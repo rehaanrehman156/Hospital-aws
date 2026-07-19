@@ -1,4 +1,4 @@
-FROM node:16-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -13,4 +13,3 @@ USER app
 EXPOSE 8080
 
 CMD ["node", "server.js"]
-
