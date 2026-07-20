@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
@@ -8,6 +9,15 @@ app.use(cors({
   origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((value) => value.trim())
 }));
 app.use(express.json());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later.' }
+});
+app.use(limiter);
 
 const pool = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
