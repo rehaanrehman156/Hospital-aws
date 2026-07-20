@@ -7,7 +7,7 @@ RUN apk upgrade --no-cache
 COPY package*.json ./
 RUN npm install --omit=dev && npm cache clean --force
 
-COPY . .
+COPY server.js ./
 
 FROM cgr.dev/chainguard/node:latest
 

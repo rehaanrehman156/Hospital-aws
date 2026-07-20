@@ -5,7 +5,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 
-COPY . .
+COPY index.html vite.config.js ./
+COPY src ./src
 
 RUN addgroup -S app && adduser -S app -G app && chown -R app:app /app
 USER app
