@@ -1,21 +1,108 @@
-name: Deploy app
+name: Release and deploy dev
 
 on:
   push:
     branches:
       - main
-      - dev
-      - stage
   workflow_dispatch:
 
 concurrency:
-  group: deploy-${{ github.ref_name }}
+  group: release-main
   cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
+  build-and-push-backend:
+    name: Build backend image and push to ECR
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
+    outputs:
+      image_uri: ${{ steps.image.outputs.image_uri }}
+      image_tag: ${{ steps.image.outputs.image_tag }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check backend deployment secrets
+        id: backend_check
+        run: |
+          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fail when backend secrets are missing
+        if: steps.backend_check.outputs.ready != 'true'
+        run: |
+          echo "Missing one or more required backend deployment secrets."
+          exit 1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        id: image
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
+        run: |
+          set -e
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
+          IMAGE_TAG="${GITHUB_SHA::7}"
+
+          aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
+            aws ecr create-repository --region "$AWS_REGION" --repository-name "$ECR_REPOSITORY"
+
+          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
+          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:latest"
+          docker push "${IMAGE_URI}:${IMAGE_TAG}"
+          docker push "${IMAGE_URI}:latest"
+
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+
+  update-dev-manifest:
+    name: Update dev manifest for Argo CD
+    runs-on: ubuntu-latest
+    needs: build-and-push-backend
+    if: needs.build-and-push-backend.result == 'success'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Update dev image tag
+        env:
+          IMAGE_URI: ${{ needs.build-and-push-backend.outputs.image_uri }}
+          IMAGE_TAG: ${{ needs.build-and-push-backend.outputs.image_tag }}
+        run: |
+          set -e
+          sed -i -E "s|^(\s*image:\s*).*$|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+
+      - name: Commit dev manifest update
+        run: |
+          set -e
+          if git diff --quiet -- kubernetes/dev/backend-deployment.yaml; then
+            echo "No dev manifest changes to commit."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kubernetes/dev/backend-deployment.yaml
+          git commit -m "ci: update dev backend image to ${GITHUB_SHA::7} [skip ci]"
+          git push
+
   deploy-frontend:
     name: Deploy frontend to S3
     runs-on: ubuntu-latest
@@ -54,7 +141,7 @@ jobs:
           fi
 
       - name: Skip frontend deploy (secrets missing)
-        if: steps.frontend_check.outputs.ready != 'true' 
+        if: steps.frontend_check.outputs.ready != 'true'
         run: echo "Frontend deploy skipped. Missing one or more required secrets."
 
       - name: Configure AWS credentials
@@ -85,233 +172,3 @@ jobs:
           aws cloudfront create-invalidation \
             --distribution-id "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" \
             --paths "/*"
-
-  build-backend-and-update-manifest:
-    name: Build backend image and update manifest
-    runs-on: ubuntu-latest
-    needs: deploy-frontend
-    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'main'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check backend build secrets
-        id: backend_check
-        run: |
-          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Skip backend build (secrets missing)
-        if: steps.backend_check.outputs.ready != 'true'
-        run: echo "Backend build skipped. Missing one or more required secrets."
-
-      - name: Configure AWS credentials
-        if: steps.backend_check.outputs.ready == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        if: steps.backend_check.outputs.ready == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push backend image
-        if: steps.backend_check.outputs.ready == 'true'
-        id: image
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        run: |
-          set -e
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-          IMAGE_TAG="${GITHUB_SHA::7}"
-
-          aws ecr describe-repositories --region "$AWS_REGION" --repository-names "$ECR_REPOSITORY" >/dev/null 2>&1 || \
-            aws ecr create-repository --region "$AWS_REGION" --repository-name "$ECR_REPOSITORY"
-
-          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
-          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:latest"
-          docker push "${IMAGE_URI}:${IMAGE_TAG}"
-          docker push "${IMAGE_URI}:latest"
-
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Update Kubernetes manifest image tag
-        if: steps.backend_check.outputs.ready == 'true'
-        env:
-          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
-          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
-        run: |
-          set -e
-          sed -i "s|^\(\s*image:\s*\).*|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/backend-eks-deployment.yaml
-
-      - name: Commit manifest update for Argo CD
-        if: steps.backend_check.outputs.ready == 'true'
-        run: |
-          set -e
-          if git diff --quiet -- kubernetes/backend-eks-deployment.yaml; then
-            echo "No manifest changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add kubernetes/backend-eks-deployment.yaml
-          git commit -m "ci: update backend image for Argo CD [skip ci]"
-          git push
-
-  deploy-dev:
-    name: Deploy to dev namespace
-    runs-on: ubuntu-latest
-    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'dev'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check secrets
-        id: secrets_check
-        run: |
-          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Configure AWS credentials
-        if: steps.secrets_check.outputs.ready == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        if: steps.secrets_check.outputs.ready == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push dev image
-        if: steps.secrets_check.outputs.ready == 'true'
-        id: image
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        run: |
-          set -e
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-          IMAGE_TAG="dev-${GITHUB_SHA::7}"
-
-          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
-          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:dev"
-          docker push "${IMAGE_URI}:${IMAGE_TAG}"
-          docker push "${IMAGE_URI}:dev"
-
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Update dev manifest image tag
-        if: steps.secrets_check.outputs.ready == 'true'
-        env:
-          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
-          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
-        run: |
-          set -e
-          sed -i "s|^\(\s*image:\s*\).*|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
-
-      - name: Commit dev manifest update
-        if: steps.secrets_check.outputs.ready == 'true'
-        run: |
-          set -e
-          if git diff --quiet -- kubernetes/dev/backend-deployment.yaml; then
-            echo "No manifest changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add kubernetes/dev/backend-deployment.yaml
-          git commit -m "ci: update dev backend image [skip ci]"
-          git push
-
-  deploy-stage:
-    name: Deploy to stage namespace
-    runs-on: ubuntu-latest
-    if: (github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')) && github.ref_name == 'stage'
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check secrets
-        id: secrets_check
-        run: |
-          if [ -n "${{ secrets.AWS_ACCESS_KEY_ID }}" ] && [ -n "${{ secrets.AWS_SECRET_ACCESS_KEY }}" ] && [ -n "${{ secrets.AWS_REGION }}" ] && [ -n "${{ secrets.ECR_REPOSITORY }}" ]; then
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Configure AWS credentials
-        if: steps.secrets_check.outputs.ready == 'true'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Login to Amazon ECR
-        if: steps.secrets_check.outputs.ready == 'true'
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build and push stage image
-        if: steps.secrets_check.outputs.ready == 'true'
-        id: image
-        env:
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY }}
-        run: |
-          set -e
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPOSITORY}"
-          IMAGE_TAG="stage-${GITHUB_SHA::7}"
-
-          docker build -t "${IMAGE_URI}:${IMAGE_TAG}" apps/backend
-          docker tag "${IMAGE_URI}:${IMAGE_TAG}" "${IMAGE_URI}:stage"
-          docker push "${IMAGE_URI}:${IMAGE_TAG}"
-          docker push "${IMAGE_URI}:stage"
-
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
-
-      - name: Update stage manifest image tag
-        if: steps.secrets_check.outputs.ready == 'true'
-        env:
-          IMAGE_URI: ${{ steps.image.outputs.image_uri }}
-          IMAGE_TAG: ${{ steps.image.outputs.image_tag }}
-        run: |
-          set -e
-          sed -i "s|^\(\s*image:\s*\).*|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/stage/backend-deployment.yaml
-
-      - name: Commit stage manifest update
-        if: steps.secrets_check.outputs.ready == 'true'
-        run: |
-          set -e
-          if git diff --quiet -- kubernetes/stage/backend-deployment.yaml; then
-            echo "No manifest changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add kubernetes/stage/backend-deployment.yaml
-          git commit -m "ci: update stage backend image [skip ci]"
-          git push

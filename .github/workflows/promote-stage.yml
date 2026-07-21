@@ -1,0 +1,62 @@
+name: Promote backend to stage
+
+on:
+  workflow_dispatch:
+    inputs:
+      image:
+        description: Optional full image URI with tag. If empty, uses image from kubernetes/dev/backend-deployment.yaml.
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote-stage:
+    name: Create PR for stage promotion
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve image to promote
+        id: image
+        env:
+          INPUT_IMAGE: ${{ github.event.inputs.image }}
+        run: |
+          set -e
+          if [ -n "$INPUT_IMAGE" ]; then
+            IMAGE="$INPUT_IMAGE"
+          else
+            IMAGE=$(awk '/^\s*image:\s*/ { print $2; exit }' kubernetes/dev/backend-deployment.yaml)
+          fi
+
+          if [ -z "$IMAGE" ]; then
+            echo "Unable to resolve image to promote."
+            exit 1
+          fi
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Update stage manifest image
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -e
+          sed -i -E "s|^(\s*image:\s*).*$|\1${IMAGE}|g" kubernetes/stage/backend-deployment.yaml
+
+      - name: Create stage promotion pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: promote backend to stage (${{ steps.image.outputs.image }})"
+          title: "Promote backend to stage: ${{ steps.image.outputs.image }}"
+          body: |
+            ## Promotion Summary
+            - Source: `kubernetes/dev/backend-deployment.yaml`
+            - Target: `kubernetes/stage/backend-deployment.yaml`
+            - Image: `${{ steps.image.outputs.image }}`
+          branch: promote-stage-${{ github.run_id }}
+          delete-branch: true
+          base: main
+          labels: deployment,stage

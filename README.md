@@ -43,21 +43,41 @@ npm run build:frontend
 npm run deploy:s3 --workspace @hospital/frontend -- --BucketName YOUR_BUCKET_NAME
 ```
 
-## GitHub Actions Deploy
-When code is pushed to `main`, the workflow:
-- builds frontend (`apps/frontend`)
-- deploys frontend to S3 with cache headers
-- optionally invalidates CloudFront
-- builds backend Docker image and pushes to ECR
-- updates `kubernetes/backend-eks-deployment.yaml` image tag for Argo CD GitOps sync
+## GitHub Actions: DevSecOps + GitOps pipeline
+
+### 1) PR Security Gates
+These workflows run on pull requests and should be set as required checks:
+- `.github/workflows/security.yml` (Trivy fs/config/image + Gitleaks)
+- `.github/workflows/codeql.yml` (CodeQL analysis)
+- `.github/workflows/sonarcloud.yml` (SonarCloud scan + quality gate)
+
+### 2) Release and Dev Deployment (`deploy.yml`)
+On push to `main`, the workflow:
+- builds backend Docker image once and tags it with short commit SHA
+- pushes image to ECR
+- updates `kubernetes/dev/backend-deployment.yaml`
+- commits that manifest change (with `[skip ci]`) for Argo CD sync
+- builds frontend and deploys to S3 (optional if secrets are present)
+
+### 3) Promotion Workflows
+Manual workflows create pull requests so the same immutable image is promoted:
+- `.github/workflows/promote-stage.yml`
+  - source: `kubernetes/dev/backend-deployment.yaml`
+  - target: `kubernetes/stage/backend-deployment.yaml`
+- `.github/workflows/promote-prod.yml`
+  - source: `kubernetes/stage/backend-deployment.yaml`
+  - target: `kubernetes/backend-eks-deployment.yaml`
 
 Required repository secrets:
 - AWS_ACCESS_KEY_ID
 - AWS_SECRET_ACCESS_KEY
 - AWS_REGION
+- ECR_REPOSITORY
+- SONAR_TOKEN
+
+Required for frontend deploy:
 - S3_BUCKET_NAME
 - VITE_API_BASE_URL
-- ECR_REPOSITORY
 
 Optional frontend secret:
 - CLOUDFRONT_DISTRIBUTION_ID
@@ -66,8 +86,11 @@ Optional frontend secret:
 1. Install Argo CD in your EKS Auto cluster.
 2. Apply `kubernetes/backend-secret.yaml` with real DB credentials.
 3. Apply `kubernetes/backend-hpa.yaml` for backend autoscaling.
-4. Apply `kubernetes/argocd-application.yaml`.
-5. Argo CD will watch `kubernetes/backend-eks-deployment.yaml` and sync backend automatically.
+4. Create Argo CD Applications for each environment path:
+   - `kubernetes/dev`
+   - `kubernetes/stage`
+   - `kubernetes` (for `backend-eks-deployment.yaml` / prod)
+5. Dev app can auto-sync; stage/prod should use approval before sync.
 
 ## Security
 Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.
