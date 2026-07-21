@@ -92,6 +92,14 @@ Optional frontend secret:
    - `kubernetes` (for `backend-eks-deployment.yaml` / prod)
 5. Dev app can auto-sync; stage/prod should use approval before sync.
 
+### Pipeline flow verification endpoint
+Backend exposes:
+- `GET /pipeline-check`
+
+Response includes:
+- `environment` (`dev`, `stage`, `prod`)
+- `pipelineMarker` (`gitops-flow-check-v1`)
+
 ## Security
 Do not commit real credentials. Use .env files locally and GitHub Actions secrets in CI.
 

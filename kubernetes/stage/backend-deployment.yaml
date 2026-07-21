@@ -59,6 +59,8 @@ spec:
           env:
             - name: PORT
               value: "8080"
+            - name: APP_ENV
+              value: "stage"
             - name: CORS_ORIGIN
               value: "*"
           envFrom:
