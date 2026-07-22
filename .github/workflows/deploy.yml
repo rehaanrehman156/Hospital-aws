@@ -19,8 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
     outputs:
-      image_uri: ${{ steps.image.outputs.image_uri }}
-      image_tag: ${{ steps.image.outputs.image_tag }}
+      image_ref: ${{ steps.image.outputs.image_ref }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,8 +68,7 @@ jobs:
           docker push "${IMAGE_URI}:${IMAGE_TAG}"
           docker push "${IMAGE_URI}:latest"
 
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_ref=${IMAGE_URI}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
   update-dev-manifest:
     name: Update dev manifest for Argo CD
@@ -83,11 +81,14 @@ jobs:
 
       - name: Update dev image tag
         env:
-          IMAGE_URI: ${{ needs.build-and-push-backend.outputs.image_uri }}
-          IMAGE_TAG: ${{ needs.build-and-push-backend.outputs.image_tag }}
+          IMAGE_REF: ${{ needs.build-and-push-backend.outputs.image_ref }}
         run: |
           set -e
-          sed -i -E "s|^(\s*image:\s*).*$|\1${IMAGE_URI}:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          if [ -z "${IMAGE_REF}" ]; then
+            echo "image_ref output is empty; refusing to write invalid manifest."
+            exit 1
+          fi
+          sed -i -E "s|^(\s*image:\s*).*$|\1${IMAGE_REF}|g" kubernetes/dev/backend-deployment.yaml
 
       - name: Commit dev manifest update
         run: |
