@@ -64,7 +64,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Build backend image
-        run: docker build -t hospital-backend:security-scan apps/backend
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            docker build -t hospital-backend:security-scan apps/backend && break
+            if [ "$attempt" -eq 3 ]; then
+              echo "Backend image build failed after 3 attempts."
+              exit 1
+            fi
+            echo "Build failed, retrying in 10 seconds..."
+            sleep 10
+          done
 
       - name: Scan backend image
         uses: aquasecurity/trivy-action@master
@@ -74,4 +84,3 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
-

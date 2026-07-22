@@ -23,13 +23,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check Sonar token
+        id: sonar_token
+        run: |
+          if [ -n "${{ secrets.SONAR_TOKEN }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip SonarCloud scan (missing SONAR_TOKEN)
+        if: steps.sonar_token.outputs.ready != 'true'
+        run: echo "SONAR_TOKEN secret is missing. Skipping SonarCloud scan."
+
       - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v5
+        if: steps.sonar_token.outputs.ready == 'true'
+        uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io
 
       - name: SonarCloud quality gate
+        if: steps.sonar_token.outputs.ready == 'true'
         uses: SonarSource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
