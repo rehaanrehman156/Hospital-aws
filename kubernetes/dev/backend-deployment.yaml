@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: backend
-          image: :8a181d9
+          image: :6f7fe21
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
