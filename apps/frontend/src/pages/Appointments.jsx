@@ -2,68 +2,165 @@ import { useEffect, useState } from "react";
 import Layout from "../components/Layout";
 import { api } from "../utils/api";
 
-const empty = { patient_name: "", doctor_name: "", department: "", date: "", time: "", status: "Pending" };
+const empty = {
+  patient_id: "",
+  doctor_id: "",
+  appointment_date: "",
+  appointment_time: "",
+  status: "Pending",
+};
 
-const DEPARTMENTS = ["Cardiology","Neurology","Orthopedics","Pediatrics","General","Dermatology","ENT"];
+const statusList = ["Pending", "Confirmed", "Cancelled", "Completed"];
+
+function formatDate(value) {
+  if (!value) return "—";
+  return new Date(value).toLocaleDateString();
+}
+
+function formatTime(value) {
+  if (!value) return "—";
+  const normalized = String(value).slice(0, 5);
+  const [hourRaw, minute] = normalized.split(":");
+  const hour = Number(hourRaw);
+  if (Number.isNaN(hour) || !minute) return value;
+  const period = hour >= 12 ? "PM" : "AM";
+  const adjusted = hour % 12 || 12;
+  return `${adjusted}:${minute} ${period}`;
+}
 
 export default function Appointments() {
   const [appointments, setAppointments] = useState([]);
-  const [search, setSearch]   = useState("");
-  const [filter, setFilter]   = useState("All");
+  const [patients, setPatients] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
-  const [form, setForm]       = useState(empty);
+  const [form, setForm] = useState(empty);
   const [editing, setEditing] = useState(null);
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  // Since backend may not have appointments table yet, we use local state
-  // Replace with api calls once you add /api/appointments to backend
+  const load = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [appointmentsData, patientsData, doctorsData] = await Promise.all([
+        api.getAppointments(),
+        api.getPatients(),
+        api.getDoctors(),
+      ]);
+      setAppointments(appointmentsData);
+      setPatients(patientsData);
+      setDoctors(doctorsData);
+    } catch {
+      setError("Failed to load appointments.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    setAppointments([
-      { id: 1, patient_name: "John Doe",   doctor_name: "Dr. Brown", department: "Cardiology",  date: "2026-07-04", time: "10:00 AM", status: "Confirmed" },
-      { id: 2, patient_name: "Jane Smith", doctor_name: "Dr. Green", department: "Neurology",   date: "2026-07-04", time: "11:30 AM", status: "Pending" },
-      { id: 3, patient_name: "Ravi Kumar", doctor_name: "Dr. Shah",  department: "Orthopedics", date: "2026-07-04", time: "2:00 PM",  status: "Confirmed" },
-      { id: 4, patient_name: "Priya Mehta",doctor_name: "Dr. Brown", department: "Cardiology",  date: "2026-07-03", time: "9:00 AM",  status: "Cancelled" },
-      { id: 5, patient_name: "Arjun Khan", doctor_name: "Dr. Khan",  department: "Pediatrics",  date: "2026-07-04", time: "3:30 PM",  status: "Completed" },
-    ]);
+    load();
   }, []);
 
-  const filtered = appointments.filter(a => {
-    const matchSearch = a.patient_name?.toLowerCase().includes(search.toLowerCase()) ||
-                        a.doctor_name?.toLowerCase().includes(search.toLowerCase());
+  useEffect(() => {
+    if (!showModal || !form.doctor_id || !form.appointment_date) {
+      setAvailableSlots([]);
+      return;
+    }
+
+    api
+      .getDoctorAvailability(form.doctor_id, form.appointment_date)
+      .then((data) => {
+        const slots = data.slots || [];
+        if (editing && form.appointment_time) {
+          const currentTime = String(form.appointment_time).slice(0, 5);
+          const hasCurrentTime = slots.some((slot) => slot.time === currentTime);
+          if (!hasCurrentTime) {
+            slots.push({ time: currentTime, available: true });
+          }
+        }
+        setAvailableSlots(slots);
+      })
+      .catch(() => setAvailableSlots([]));
+  }, [showModal, form.doctor_id, form.appointment_date, editing, form.appointment_time]);
+
+  const filtered = appointments.filter((a) => {
+    const patientName = (a.patient_name || "").toLowerCase();
+    const doctorName = (a.doctor_name || "").toLowerCase();
+    const query = search.toLowerCase();
+    const matchSearch = patientName.includes(query) || doctorName.includes(query);
     const matchFilter = filter === "All" || a.status === filter;
     return matchSearch && matchFilter;
   });
 
   const counts = {
-    total:     appointments.length,
-    confirmed: appointments.filter(a => a.status === "Confirmed").length,
-    pending:   appointments.filter(a => a.status === "Pending").length,
-    cancelled: appointments.filter(a => a.status === "Cancelled").length,
+    total: appointments.length,
+    confirmed: appointments.filter((a) => a.status === "Confirmed").length,
+    pending: appointments.filter((a) => a.status === "Pending").length,
+    cancelled: appointments.filter((a) => a.status === "Cancelled").length,
   };
 
-  const openAdd  = () => { setForm(empty); setEditing(null); setShowModal(true); };
-  const openEdit = (a) => { setForm({ ...a }); setEditing(a.id); setShowModal(true); };
+  const openAdd = () => {
+    setForm(empty);
+    setEditing(null);
+    setShowModal(true);
+  };
 
-  const save = () => {
-    if (!form.patient_name || !form.doctor_name || !form.date) return alert("Patient, Doctor and Date are required.");
-    setSaving(true);
-    if (editing) {
-      setAppointments(prev => prev.map(a => a.id === editing ? { ...a, ...form } : a));
-    } else {
-      setAppointments(prev => [...prev, { id: Date.now(), ...form }]);
+  const openEdit = (a) => {
+    setForm({
+      patient_id: String(a.patient_id || ""),
+      doctor_id: String(a.doctor_id || ""),
+      appointment_date: a.appointment_date ? String(a.appointment_date).slice(0, 10) : "",
+      appointment_time: a.appointment_time ? String(a.appointment_time).slice(0, 5) : "",
+      status: a.status || "Pending",
+    });
+    setEditing(a.appointment_id);
+    setShowModal(true);
+  };
+
+  const save = async () => {
+    if (!form.patient_id || !form.doctor_id || !form.appointment_date || !form.appointment_time) {
+      alert("Patient, doctor, date and time are required.");
+      return;
     }
-    setShowModal(false);
-    setSaving(false);
+
+    setSaving(true);
+    try {
+      const payload = {
+        patient_id: Number(form.patient_id),
+        doctor_id: Number(form.doctor_id),
+        appointment_date: form.appointment_date,
+        appointment_time: form.appointment_time,
+        status: form.status,
+      };
+
+      if (editing) {
+        await api.updateAppointment(editing, payload);
+      } else {
+        await api.addAppointment(payload);
+      }
+
+      setShowModal(false);
+      await load();
+    } catch (err) {
+      alert(err.message || "Failed to save appointment.");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const remove = (id) => {
+  const remove = async (id) => {
     if (!window.confirm("Delete this appointment?")) return;
-    setAppointments(prev => prev.filter(a => a.id !== id));
+    await api.deleteAppointment(id).catch(() => alert("Delete failed."));
+    load();
   };
 
   const Badge = ({ status }) => {
-    const map = { Confirmed: ["#D1FAE5","#065F46"], Pending: ["#FEF3C7","#92400E"], Cancelled: ["#FEE2E2","#991B1B"], Completed: ["#DBEAFE","#1D4ED8"] };
-    const [bg, color] = map[status] || ["#F3F4F6","#374151"];
+    const map = { Confirmed: ["#D1FAE5", "#065F46"], Pending: ["#FEF3C7", "#92400E"], Cancelled: ["#FEE2E2", "#991B1B"], Completed: ["#DBEAFE", "#1D4ED8"] };
+    const [bg, color] = map[status] || ["#F3F4F6", "#374151"];
     return <span style={{ background: bg, color, fontSize: 11, padding: "2px 10px", borderRadius: 20 }}>{status}</span>;
   };
 
@@ -77,13 +174,12 @@ export default function Appointments() {
         <button onClick={openAdd} style={btn.primary}>+ New Appointment</button>
       </div>
 
-      {/* Stats */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: "1.5rem" }}>
         {[
-          { label: "Total Today",  value: counts.total,     color: "#6B7280" },
-          { label: "Confirmed",    value: counts.confirmed,  color: "#065F46" },
-          { label: "Pending",      value: counts.pending,    color: "#92400E" },
-          { label: "Cancelled",    value: counts.cancelled,  color: "#991B1B" },
+          { label: "Total", value: counts.total, color: "#6B7280" },
+          { label: "Confirmed", value: counts.confirmed, color: "#065F46" },
+          { label: "Pending", value: counts.pending, color: "#92400E" },
+          { label: "Cancelled", value: counts.cancelled, color: "#991B1B" },
         ].map(({ label, value, color }) => (
           <div key={label} style={{ background: "#fff", borderRadius: 12, padding: "1.25rem", border: "1px solid #E5E7EB" }}>
             <p style={{ margin: "0 0 6px", fontSize: 12, color: "#6B7280" }}>{label}</p>
@@ -92,75 +188,120 @@ export default function Appointments() {
         ))}
       </div>
 
-      {/* Filters */}
       <div style={{ background: "#fff", border: "1px solid #E5E7EB", borderRadius: 10, padding: "0.75rem 1rem", marginBottom: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <input placeholder="Search patient or doctor..." value={search} onChange={e => setSearch(e.target.value)}
-          style={{ border: "none", outline: "none", fontSize: 13, flex: 1, minWidth: 160, color: "#111827" }} />
-        <select value={filter} onChange={e => setFilter(e.target.value)} style={sel}>
-          {["All","Confirmed","Pending","Cancelled","Completed"].map(s => <option key={s}>{s}</option>)}
+        <input
+          placeholder="Search patient or doctor..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ border: "none", outline: "none", fontSize: 13, flex: 1, minWidth: 160, color: "#111827" }}
+        />
+        <select value={filter} onChange={(e) => setFilter(e.target.value)} style={sel}>
+          {["All", ...statusList].map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>
 
-      {/* Table */}
       <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", padding: "1.25rem" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-          <thead>
-            <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
-              {["#","Patient","Doctor","Department","Date","Time","Status","Actions"].map(h => (
-                <th key={h} style={{ textAlign: "left", padding: "8px 6px", color: "#9CA3AF", fontWeight: 500, fontSize: 12 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((a, i) => (
-              <tr key={a.id} style={{ borderBottom: "1px solid #F9FAFB" }}>
-                <td style={td}>{i + 1}</td>
-                <td style={{ ...td, fontWeight: 500, color: "#111827" }}>{a.patient_name}</td>
-                <td style={td}>{a.doctor_name}</td>
-                <td style={td}>{a.department}</td>
-                <td style={td}>{a.date}</td>
-                <td style={td}>{a.time}</td>
-                <td style={td}><Badge status={a.status} /></td>
-                <td style={td}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => openEdit(a)} style={btn.edit}>Edit</button>
-                    <button onClick={() => remove(a.id)} style={btn.danger}>Delete</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} style={{ padding: "2rem", textAlign: "center", color: "#9CA3AF" }}>No appointments found</td></tr>
-            )}
-          </tbody>
-        </table>
+        {loading ? <p style={{ color: "#6B7280" }}>Loading...</p> :
+          error ? <p style={{ color: "#EF4444" }}>{error}</p> : (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
+                  {["#", "Patient", "Doctor", "Department", "Date", "Time", "Status", "Actions"].map((h) => (
+                    <th key={h} style={{ textAlign: "left", padding: "8px 6px", color: "#9CA3AF", fontWeight: 500, fontSize: 12 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((a, i) => (
+                  <tr key={a.appointment_id} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                    <td style={td}>{i + 1}</td>
+                    <td style={{ ...td, fontWeight: 500, color: "#111827" }}>{a.patient_name || "—"}</td>
+                    <td style={td}>{a.doctor_name || "—"}</td>
+                    <td style={td}>{a.department || "—"}</td>
+                    <td style={td}>{formatDate(a.appointment_date)}</td>
+                    <td style={td}>{formatTime(a.appointment_time)}</td>
+                    <td style={td}><Badge status={a.status} /></td>
+                    <td style={td}>
+                      <div style={{ display: "flex", gap: 8 }}>
+                        <button onClick={() => openEdit(a)} style={btn.edit}>Edit</button>
+                        <button onClick={() => remove(a.appointment_id)} style={btn.danger}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr><td colSpan={8} style={{ padding: "2rem", textAlign: "center", color: "#9CA3AF" }}>No appointments found</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
       </div>
 
-      {/* Modal */}
       {showModal && (
         <div style={modal.overlay}>
           <div style={modal.box}>
             <h2 style={{ margin: "0 0 1.25rem", fontSize: 16, fontWeight: 700, color: "#111827" }}>
-              {editing ? "Edit Appointment" : "New Appointment"}
+              {editing ? "Edit Appointment" : "Book Appointment"}
             </h2>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-              {[["Patient Name","patient_name","text"],["Doctor Name","doctor_name","text"],["Date","date","date"],["Time","time","text"]].map(([label,key,type]) => (
-                <div key={key}>
-                  <label style={modal.label}>{label}</label>
-                  <input type={type} value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})} style={modal.input} />
-                </div>
-              ))}
               <div>
-                <label style={modal.label}>Department</label>
-                <select value={form.department} onChange={e => setForm({...form,department:e.target.value})} style={modal.input}>
-                  <option value="">Select</option>
-                  {DEPARTMENTS.map(d => <option key={d}>{d}</option>)}
+                <label style={modal.label}>Patient</label>
+                <select
+                  value={form.patient_id}
+                  onChange={(e) => setForm({ ...form, patient_id: e.target.value })}
+                  style={modal.input}
+                >
+                  <option value="">Select patient</option>
+                  {patients.map((p) => (
+                    <option key={p.patient_id} value={p.patient_id}>
+                      {`${p.first_name || ""} ${p.last_name || ""}`.trim()}
+                    </option>
+                  ))}
                 </select>
               </div>
               <div>
+                <label style={modal.label}>Doctor</label>
+                <select
+                  value={form.doctor_id}
+                  onChange={(e) => setForm({ ...form, doctor_id: e.target.value, appointment_time: "" })}
+                  style={modal.input}
+                >
+                  <option value="">Select doctor</option>
+                  {doctors.map((d) => (
+                    <option key={d.doctor_id} value={d.doctor_id}>
+                      {`${d.first_name || ""} ${d.last_name || ""}`.trim()} ({d.specialization || "General"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={modal.label}>Date</label>
+                <input
+                  type="date"
+                  value={form.appointment_date}
+                  onChange={(e) => setForm({ ...form, appointment_date: e.target.value, appointment_time: "" })}
+                  style={modal.input}
+                />
+              </div>
+              <div>
+                <label style={modal.label}>Available Time</label>
+                <select
+                  value={form.appointment_time}
+                  onChange={(e) => setForm({ ...form, appointment_time: e.target.value })}
+                  style={modal.input}
+                >
+                  <option value="">Select time slot</option>
+                  {availableSlots.map((slot) => (
+                    <option key={slot.time} value={slot.time} disabled={!slot.available}>
+                      {formatTime(slot.time)}{slot.available ? "" : " (Booked)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ gridColumn: "1/-1" }}>
                 <label style={modal.label}>Status</label>
-                <select value={form.status} onChange={e => setForm({...form,status:e.target.value})} style={modal.input}>
-                  {["Pending","Confirmed","Cancelled","Completed"].map(s => <option key={s}>{s}</option>)}
+                <select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })} style={modal.input}>
+                  {statusList.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
             </div>
@@ -175,17 +316,17 @@ export default function Appointments() {
   );
 }
 
-const td  = { padding: "10px 6px", color: "#6B7280" };
+const td = { padding: "10px 6px", color: "#6B7280" };
 const sel = { border: "1px solid #E5E7EB", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#374151", outline: "none" };
 const btn = {
-  primary:   { background: "#1D4ED8", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontWeight: 600 },
+  primary: { background: "#1D4ED8", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer", fontWeight: 600 },
   secondary: { background: "#F3F4F6", color: "#374151", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, cursor: "pointer" },
-  edit:      { background: "#EFF6FF", color: "#1D4ED8", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" },
-  danger:    { background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" },
+  edit: { background: "#EFF6FF", color: "#1D4ED8", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" },
+  danger: { background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 6, padding: "4px 10px", fontSize: 12, cursor: "pointer" },
 };
 const modal = {
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 },
-  box:     { background: "#fff", borderRadius: 14, padding: "1.75rem", width: 520, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" },
-  label:   { display: "block", fontSize: 12, color: "#6B7280", marginBottom: 4 },
-  input:   { width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", boxSizing: "border-box", color: "#111827" },
+  box: { background: "#fff", borderRadius: 14, padding: "1.75rem", width: 540, maxWidth: "95vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" },
+  label: { display: "block", fontSize: 12, color: "#6B7280", marginBottom: 4 },
+  input: { width: "100%", border: "1px solid #E5E7EB", borderRadius: 8, padding: "8px 10px", fontSize: 13, outline: "none", boxSizing: "border-box", color: "#111827" },
 };

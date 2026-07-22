@@ -52,6 +52,10 @@ export const api = {
 
   // Appointments
   getAppointments: () => apiFetch("/appointments"),
+  addAppointment: (data) => apiFetch("/appointments", { method: "POST", body: JSON.stringify(data) }),
+  updateAppointment: (id, data) => apiFetch(`/appointments/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteAppointment: (id) => apiFetch(`/appointments/${id}`, { method: "DELETE" }),
+  getDoctorAvailability: (doctorId, date) => apiFetch(`/appointments/availability?doctor_id=${encodeURIComponent(doctorId)}&date=${encodeURIComponent(date)}`),
 
   // Settings
   getSettings: () => apiFetch("/settings"),

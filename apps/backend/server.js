@@ -121,8 +121,155 @@ app.delete('/billing/:id', async (req, res) => {
 });
 
 app.get('/appointments', async (req, res) => {
-  const [rows] = await pool.query('SELECT * FROM appointments ORDER BY appointment_id DESC');
+  const [rows] = await pool.query(`
+    SELECT
+      a.appointment_id,
+      a.patient_id,
+      a.doctor_id,
+      a.appointment_date,
+      a.appointment_time,
+      a.status,
+      CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+      CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+      d.specialization AS department
+    FROM appointments a
+    LEFT JOIN patients p ON p.patient_id = a.patient_id
+    LEFT JOIN doctors d ON d.doctor_id = a.doctor_id
+    ORDER BY a.appointment_date DESC, a.appointment_time DESC, a.appointment_id DESC
+  `);
   res.json(rows);
+});
+
+const APPOINTMENT_TIME_SLOTS = [
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30', '17:00'
+];
+
+function normalizeTime(value) {
+  if (!value) return null;
+  const str = String(value).trim();
+  if (!str) return null;
+
+  const amPmMatch = str.match(/^(\d{1,2}):(\d{2})\s*([AP]M)$/i);
+  if (amPmMatch) {
+    let hour = Number(amPmMatch[1]);
+    const minute = amPmMatch[2];
+    const period = amPmMatch[3].toUpperCase();
+    if (period === 'PM' && hour !== 12) hour += 12;
+    if (period === 'AM' && hour === 12) hour = 0;
+    return `${String(hour).padStart(2, '0')}:${minute}`;
+  }
+
+  const hhMmMatch = str.match(/^(\d{2}):(\d{2})/);
+  if (hhMmMatch) {
+    return `${hhMmMatch[1]}:${hhMmMatch[2]}`;
+  }
+
+  return null;
+}
+
+app.get('/appointments/availability', async (req, res) => {
+  const doctorId = Number(req.query.doctor_id);
+  const date = String(req.query.date || '').trim();
+
+  if (!doctorId || !date) {
+    return res.status(400).json({ error: 'doctor_id and date are required.' });
+  }
+
+  const [rows] = await pool.query(
+    `SELECT appointment_time
+     FROM appointments
+     WHERE doctor_id = ? AND appointment_date = ? AND status <> 'Cancelled'`,
+    [doctorId, date]
+  );
+
+  const booked = new Set(
+    rows
+      .map((r) => normalizeTime(r.appointment_time))
+      .filter(Boolean)
+  );
+
+  const slots = APPOINTMENT_TIME_SLOTS.map((time) => ({
+    time,
+    available: !booked.has(time)
+  }));
+
+  res.json({ doctor_id: doctorId, date, slots });
+});
+
+app.post('/appointments', async (req, res) => {
+  const { patient_id, doctor_id, appointment_date, appointment_time, status } = req.body;
+  const patientId = Number(patient_id);
+  const doctorId = Number(doctor_id);
+  const time = normalizeTime(appointment_time);
+
+  if (!patientId || !doctorId || !appointment_date || !time) {
+    return res.status(400).json({ error: 'patient_id, doctor_id, appointment_date and appointment_time are required.' });
+  }
+
+  const [existing] = await pool.query(
+    `SELECT appointment_id
+     FROM appointments
+     WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status <> 'Cancelled'
+     LIMIT 1`,
+    [doctorId, appointment_date, time]
+  );
+
+  if (existing.length > 0) {
+    return res.status(409).json({ error: 'Selected time slot is already booked for this doctor.' });
+  }
+
+  await pool.query(
+    `INSERT INTO appointments (patient_id, doctor_id, appointment_date, appointment_time, status)
+     VALUES (?, ?, ?, ?, ?)`,
+    [patientId, doctorId, appointment_date, time, status || 'Pending']
+  );
+
+  res.status(201).json({ message: 'Appointment booked successfully.' });
+});
+
+app.put('/appointments/:id', async (req, res) => {
+  const appointmentId = Number(req.params.id);
+  const { patient_id, doctor_id, appointment_date, appointment_time, status } = req.body;
+  const patientId = Number(patient_id);
+  const doctorId = Number(doctor_id);
+  const time = normalizeTime(appointment_time);
+
+  if (!appointmentId || !patientId || !doctorId || !appointment_date || !time) {
+    return res.status(400).json({ error: 'appointment id, patient_id, doctor_id, appointment_date and appointment_time are required.' });
+  }
+
+  const [existing] = await pool.query(
+    `SELECT appointment_id
+     FROM appointments
+     WHERE doctor_id = ? AND appointment_date = ? AND appointment_time = ? AND status <> 'Cancelled' AND appointment_id <> ?
+     LIMIT 1`,
+    [doctorId, appointment_date, time, appointmentId]
+  );
+
+  if (existing.length > 0) {
+    return res.status(409).json({ error: 'Selected time slot is already booked for this doctor.' });
+  }
+
+  await pool.query(
+    `UPDATE appointments
+     SET patient_id = ?, doctor_id = ?, appointment_date = ?, appointment_time = ?, status = ?
+     WHERE appointment_id = ?`,
+    [patientId, doctorId, appointment_date, time, status || 'Pending', appointmentId]
+  );
+
+  res.json({ message: 'Appointment updated successfully.' });
+});
+
+app.delete('/appointments/:id', async (req, res) => {
+  const appointmentId = Number(req.params.id);
+  if (!appointmentId) {
+    return res.status(400).json({ error: 'appointment id is required.' });
+  }
+
+  await pool.query('DELETE FROM appointments WHERE appointment_id = ?', [appointmentId]);
+  res.json({ message: 'Appointment deleted successfully.' });
 });
 
 app.get('/settings', async (req, res) => {
