@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: backend
-          image: :6f7fe21
+          image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:6f7fe21
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -62,7 +62,7 @@ spec:
             - name: APP_ENV
               value: "dev"
             - name: CORS_ORIGIN
-              value: "*"
+              value: "http://hospital-frontend-rehaan-818986458477.s3-website.ap-south-1.amazonaws.com,http://localhost:5173"
           envFrom:
             - secretRef:
                 name: hospital-backend-secret
