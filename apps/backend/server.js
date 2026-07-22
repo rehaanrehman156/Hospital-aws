@@ -319,12 +319,7 @@ app.get('/health', async (req, res) => {
   res.json({ status: 'ok', service: 'hospital-backend' });
 });
 app.get('/pipeline-check', async (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'hospital-backend',
-    environment: process.env.APP_ENV || 'unknown',
-    pipelineMarker: 'gitops-flow-check-v1'
-  });
+  res.json({ status: 'ok', pipeline: 'healthy' });
 });
 const port = Number(process.env.PORT) || 8080;
 app.listen(port, '0.0.0.0', () => console.log(`Backend running on http://0.0.0.0:${port}`));
