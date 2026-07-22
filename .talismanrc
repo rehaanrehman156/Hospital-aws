@@ -1,4 +1,6 @@
 fileignoreconfig:
 - filename: apps/frontend/src/pages/Appointments.jsx
   checksum: a5327e891e92375f533bd1aa80f64ccdb545863e6ba9eb5659ee69a42818b3cd
+- filename: apps/frontend/src/pages/Dashboard.jsx
+  checksum: f59a0df4d54e4753cc57a63f3497ba51eb4f6b3e834a659e3b059412ae774449
 version: "1.0"

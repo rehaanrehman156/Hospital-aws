@@ -10,12 +10,38 @@ const StatCard = ({ label, value, sub, color }) => (
   </div>
 );
 
+const calculateAge = (dob) => {
+  if (!dob) return "—";
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return "—";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age : "—";
+};
+
+const formatAppointmentTime = (value) => {
+  if (!value) return "—";
+  const [hourRaw, minute] = String(value).slice(0, 5).split(":");
+  const hour = Number(hourRaw);
+  if (Number.isNaN(hour) || !minute) return value;
+  const period = hour >= 12 ? "PM" : "AM";
+  const adjusted = hour % 12 || 12;
+  return `${adjusted}:${minute} ${period}`;
+};
+
 const Badge = ({ status }) => {
   const map = {
     Admitted:   { bg: "#D1FAE5", color: "#065F46" },
     Pending:    { bg: "#FEF3C7", color: "#92400E" },
     Discharged: { bg: "#FEE2E2", color: "#991B1B" },
     Paid:       { bg: "#D1FAE5", color: "#065F46" },
+    Confirmed:  { bg: "#D1FAE5", color: "#065F46" },
+    Cancelled:  { bg: "#FEE2E2", color: "#991B1B" },
+    Completed:  { bg: "#DBEAFE", color: "#1D4ED8" },
   };
   const style = map[status] || { bg: "#F3F4F6", color: "#374151" };
   return (
@@ -29,6 +55,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [patients, setPatients] = useState([]);
   const [doctors, setDoctors] = useState([]);
+  const [todayAppointments, setTodayAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,6 +73,7 @@ export default function Dashboard() {
         setDoctors(Array.isArray(dash?.onDutyDoctors)
           ? dash.onDutyDoctors.map((d) => ({ ...d, specialization: d.department || d.specialization || "General" })).slice(0, 4)
           : Array.isArray(docs) ? docs.slice(0, 4) : []);
+        setTodayAppointments(Array.isArray(dash?.todayAppointments) ? dash.todayAppointments.slice(0, 5) : []);
       })
       .catch((err) => {
         console.error(err);
@@ -94,7 +122,7 @@ export default function Dashboard() {
                 return (
                   <tr key={p.patient_id || index} style={{ borderBottom: "1px solid #F9FAFB" }}>
                     <td style={{ padding: "10px 0", color: "#111827", fontWeight: 500 }}>{patientName}</td>
-                    <td style={{ padding: "10px 0", color: "#6B7280" }}>{p.dob ? new Date(p.dob).getFullYear() : "—"}</td>
+                    <td style={{ padding: "10px 0", color: "#6B7280" }}>{calculateAge(p.dob)}</td>
                     <td style={{ padding: "10px 0" }}><Badge status={p.status || "Pending"} /></td>
                   </tr>
                 );
@@ -123,6 +151,35 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+      </div>
+
+      {/* Today's appointments */}
+      <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #E5E7EB", padding: "1.25rem" }}>
+        <p style={{ margin: "0 0 1rem", fontSize: 14, fontWeight: 600, color: "#111827" }}>Today's Appointments</p>
+        {todayAppointments.length === 0 ? (
+          <p style={{ margin: 0, fontSize: 13, color: "#6B7280" }}>No appointments scheduled for today.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: "1px solid #F3F4F6" }}>
+                {["Patient", "Doctor", "Department", "Time", "Status"].map((h) => (
+                  <th key={h} style={{ textAlign: "left", padding: "6px 0", color: "#9CA3AF", fontWeight: 400 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {todayAppointments.map((a) => (
+                <tr key={a.appointment_id} style={{ borderBottom: "1px solid #F9FAFB" }}>
+                  <td style={{ padding: "10px 0", color: "#111827", fontWeight: 500 }}>{a.patient_name || "—"}</td>
+                  <td style={{ padding: "10px 0", color: "#6B7280" }}>{a.doctor_name || "—"}</td>
+                  <td style={{ padding: "10px 0", color: "#6B7280" }}>{a.department || "General"}</td>
+                  <td style={{ padding: "10px 0", color: "#6B7280" }}>{formatAppointmentTime(a.appointment_time)}</td>
+                  <td style={{ padding: "10px 0" }}><Badge status={a.status || "Pending"} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </Layout>
   );

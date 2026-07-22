@@ -44,6 +44,22 @@ app.get('/dashboard', async (req, res) => {
     const [pendingBills] = await pool.query('SELECT COALESCE(SUM(total_amount), 0) AS total FROM billing WHERE payment_status = \'Pending\'');
     const [recentPatients] = await pool.query('SELECT patient_id, CONCAT(first_name, \' \' , last_name) AS name, dob, gender AS status FROM patients ORDER BY created_at DESC LIMIT 5');
     const [onDutyDoctors] = await pool.query('SELECT doctor_id, CONCAT(first_name, \' \' , last_name) AS name, specialization AS department FROM doctors ORDER BY doctor_id LIMIT 5');
+    const [todayAppointments] = await pool.query(`
+      SELECT
+        a.appointment_id,
+        a.appointment_date,
+        a.appointment_time,
+        a.status,
+        CONCAT(p.first_name, ' ', p.last_name) AS patient_name,
+        CONCAT(d.first_name, ' ', d.last_name) AS doctor_name,
+        d.specialization AS department
+      FROM appointments a
+      LEFT JOIN patients p ON p.patient_id = a.patient_id
+      LEFT JOIN doctors d ON d.doctor_id = a.doctor_id
+      WHERE a.appointment_date = CURDATE()
+      ORDER BY a.appointment_time ASC
+      LIMIT 5
+    `);
 
     res.json({
       stats: {
@@ -54,7 +70,8 @@ app.get('/dashboard', async (req, res) => {
         bills: pendingBills[0].total || 0
       },
       recentPatients,
-      onDutyDoctors
+      onDutyDoctors,
+      todayAppointments
     });
   } catch (err) {
     console.error(err);
