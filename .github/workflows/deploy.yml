@@ -77,15 +77,21 @@ jobs:
 
       - name: Update dev image tag
         env:
-          IMAGE_TAG: ${{ github.sha }}
+          IMAGE_SHA: ${{ github.sha }}
         run: |
           set -e
-          IMAGE_TAG="${IMAGE_TAG::7}"
+          SHORT_SHA_LENGTH=7
+          IMAGE_TAG="${IMAGE_SHA:0:SHORT_SHA_LENGTH}"
           if [ -z "${IMAGE_TAG}" ]; then
             echo "image tag is empty; refusing to write invalid manifest."
             exit 1
           fi
           sed -i -E "s|^(\s*image:\s*.+):[^:[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          MATCH_COUNT=$(grep -Ec "^[[:space:]]*image:[[:space:]]+.+:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
+          if [ "${MATCH_COUNT}" -ne 1 ]; then
+            echo "Expected exactly one dev backend image line with tag ${IMAGE_TAG}, found ${MATCH_COUNT}."
+            exit 1
+          fi
 
       - name: Commit dev manifest update
         run: |
