@@ -85,7 +85,7 @@ jobs:
             echo "image tag is empty; refusing to write invalid manifest."
             exit 1
           fi
-          sed -i -E "s|^(\s*image:\s*.*:).*$|\1${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          sed -i -E "s|^(\s*image:\s*.+):[^:[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
 
       - name: Commit dev manifest update
         run: |
