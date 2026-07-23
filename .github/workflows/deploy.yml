@@ -89,7 +89,7 @@ jobs:
             exit 1
           fi
           # Replace only the backend image tag in the dev manifest.
-          sed -i -E "s|^([[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend):[^:[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          sed -i -E "s|^([[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend):[^[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
           MATCH_COUNT=$(grep -Ec "^[[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
           if [ "${MATCH_COUNT}" -ne 1 ]; then
             echo "Expected exactly one dev backend image line with tag ${IMAGE_TAG}, found ${MATCH_COUNT}."
