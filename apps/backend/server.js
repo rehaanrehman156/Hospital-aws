@@ -316,7 +316,7 @@ app.get('/ready', async (req, res) => {
   }
 });
 app.get('/health', async (req, res) => {
-  res.json({ status: 'ok', service: 'hospital-backend' });
+  res.json({ status: 'ok', service: 'hospital-backend',version: 'Build 2' });
 });
 app.get('/pipeline-check', async (req, res) => {
   res.json({ status: 'ok', pipeline: 'healthy' });
