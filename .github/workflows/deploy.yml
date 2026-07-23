@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || !contains(github.event.head_commit.message, '[skip ci]')
     outputs:
-      image_ref: ${{ steps.image.outputs.image_ref }}
+      image_tag: ${{ steps.image.outputs.image_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -68,7 +68,7 @@ jobs:
           docker push "${IMAGE_URI}:${IMAGE_TAG}"
           docker push "${IMAGE_URI}:latest"
 
-          echo "image_ref=${IMAGE_URI}:${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
 
   update-dev-manifest:
     name: Update dev manifest for Argo CD
@@ -81,14 +81,21 @@ jobs:
 
       - name: Update dev image tag
         env:
-          IMAGE_REF: ${{ needs.build-and-push-backend.outputs.image_ref }}
+          IMAGE_TAG: ${{ needs.build-and-push-backend.outputs.image_tag }}
         run: |
           set -e
-          if [ -z "${IMAGE_REF}" ]; then
-            echo "image_ref output is empty; refusing to write invalid manifest."
+          if [ -z "${IMAGE_TAG}" ]; then
+            echo "image tag is empty; refusing to write invalid manifest."
             exit 1
           fi
-          sed -i -E "s|^(\s*image:\s*).*$|\1${IMAGE_REF}|g" kubernetes/dev/backend-deployment.yaml
+          # Match the dev backend image line (repository name includes "hospital-backend").
+          IMAGE_LINE_PREFIX_PATTERN='^[[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend'
+          sed -i -E "s|(${IMAGE_LINE_PREFIX_PATTERN}):[^[:space:]]+$|\\1:${IMAGE_TAG}|" kubernetes/dev/backend-deployment.yaml
+          MATCH_COUNT=$(grep -Ec "${IMAGE_LINE_PREFIX_PATTERN}:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
+          if [ "${MATCH_COUNT}" -ne 1 ]; then
+            echo "Expected exactly one dev backend image line with tag ${IMAGE_TAG}, found ${MATCH_COUNT}."
+            exit 1
+          fi
 
       - name: Commit dev manifest update
         run: |
