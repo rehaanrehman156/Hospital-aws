@@ -88,9 +88,9 @@ jobs:
             echo "image tag is empty; refusing to write invalid manifest."
             exit 1
           fi
-          # Replace only the backend image tag in the dev manifest.
+          # Match the dev backend image line (repository name includes "hospital-backend").
           IMAGE_LINE_PREFIX_PATTERN='^[[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend'
-          sed -i -E "s|(${IMAGE_LINE_PREFIX_PATTERN}):[^[:space:]]+$|\\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          sed -i -E "s|(${IMAGE_LINE_PREFIX_PATTERN}):[^[:space:]]+$|\\1:${IMAGE_TAG}|" kubernetes/dev/backend-deployment.yaml
           MATCH_COUNT=$(grep -Ec "${IMAGE_LINE_PREFIX_PATTERN}:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
           if [ "${MATCH_COUNT}" -ne 1 ]; then
             echo "Expected exactly one dev backend image line with tag ${IMAGE_TAG}, found ${MATCH_COUNT}."
