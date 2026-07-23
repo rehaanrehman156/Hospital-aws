@@ -80,14 +80,15 @@ jobs:
           IMAGE_SHA: ${{ github.sha }}
         run: |
           set -e
+          # Keep in sync with build-and-push-backend IMAGE_TAG="${GITHUB_SHA::7}".
           SHORT_SHA_LENGTH=7
           IMAGE_TAG="${IMAGE_SHA:0:SHORT_SHA_LENGTH}"
           if [ -z "${IMAGE_TAG}" ]; then
             echo "image tag is empty; refusing to write invalid manifest."
             exit 1
           fi
-          sed -i -E "s|^(\s*image:\s*.+):[^:[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
-          MATCH_COUNT=$(grep -Ec "^[[:space:]]*image:[[:space:]]+.+:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
+          sed -i -E "s|^([[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend):[^:[:space:]]+$|\1:${IMAGE_TAG}|g" kubernetes/dev/backend-deployment.yaml
+          MATCH_COUNT=$(grep -Ec "^[[:space:]]*image:[[:space:]]*[^[:space:]]*hospital-backend:${IMAGE_TAG}$" kubernetes/dev/backend-deployment.yaml)
           if [ "${MATCH_COUNT}" -ne 1 ]; then
             echo "Expected exactly one dev backend image line with tag ${IMAGE_TAG}, found ${MATCH_COUNT}."
             exit 1
