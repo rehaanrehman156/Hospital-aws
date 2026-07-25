@@ -23,7 +23,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: backend
-          image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:a51df8e
+          image: 818986458477.dkr.ecr.ap-south-1.amazonaws.com/hospital-backend:cc34611
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
